@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -18,14 +19,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import com.android.volley.Request;
-import com.android.volley.RequestQueue;
-import com.android.volley.Response;
-import com.android.volley.VolleyError;
-import com.android.volley.toolbox.JsonObjectRequest;
-import com.android.volley.toolbox.StringRequest;
-import com.android.volley.toolbox.Volley;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -33,6 +28,9 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -42,12 +40,24 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.OkHttpClient;
+import okhttp3.RequestBody;
+import okhttp3.ResponseBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+
 public class MainActivity extends AppCompatActivity {
 
+    ApiService apiService;
     TextView tvData;
     TextView returnText;
     ImageView showImg;
     Bitmap pickedImg;
+    String mCurrentPhotoPath;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -60,13 +70,19 @@ public class MainActivity extends AppCompatActivity {
         Button btn = (Button)findViewById(R.id.httpTest);
         Button imagepick = (Button)findViewById(R.id.imagepickbtn);
 
+        initRetrofitClient();
+
         //버튼이 클릭되면 여기 리스너로 옴
         btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
 //                new JSONTask().execute("http://192.249.18.230:3000/post");//AsyncTask 시작시킴
                 //volleypost();
-                postimage();
+                try {
+                    postimage();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         });
 
@@ -78,68 +94,111 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    public void volleypost(){
-        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
-        String url = "http://192.249.18.230:3000/post";
+    private void initRetrofitClient(){
+        OkHttpClient client = new OkHttpClient.Builder().build();
 
-        JSONObject jsonObject = new JSONObject();
-
-        try {
-            jsonObject.put("user_id", "androidTest");
-            jsonObject.put("name", "jungin");
-        } catch (JSONException e) {
-            e.printStackTrace();
-        }
-
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, jsonObject, new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
-                returnText.setText(response.toString());
-            }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                error.printStackTrace();
-            }
-        });
-
-
-
-        queue.add(jsonObjectRequest);
+        apiService = new Retrofit.Builder().baseUrl("http://192.249.18.230:3000").client(client).build().create(ApiService.class);
     }
 
-    public void postimage(){
-        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
+//    public void volleypost(){
+//        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
+//        String url = "http://192.249.18.230:3000/post";
+//
+//        JSONObject jsonObject = new JSONObject();
+//
+//        try {
+//            jsonObject.put("user_id", "androidTest");
+//            jsonObject.put("name", "jungin");
+//        } catch (JSONException e) {
+//            e.printStackTrace();
+//        }
+//
+//        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, jsonObject, new Response.Listener<JSONObject>() {
+//            @Override
+//            public void onResponse(JSONObject response) {
+//                returnText.setText(response.toString());
+//            }
+//        }, new Response.ErrorListener() {
+//            @Override
+//            public void onErrorResponse(VolleyError error) {
+//                error.printStackTrace();
+//            }
+//        });
+//
+//
+//
+//        queue.add(jsonObjectRequest);
+//    }
+
+    public void postimage() throws IOException {
+
+        File filesDir = getApplicationContext().getFilesDir();
+        File file = new File(filesDir, "image" + ".png");
+
+//        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
         String url = "http://192.249.18.230:3000/post";
 
-        JSONObject jsonObject = new JSONObject();
+//        JSONObject jsonObject = new JSONObject();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pickedImg.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+        pickedImg.compress(Bitmap.CompressFormat.PNG, 0, baos);
         byte[] b = baos.toByteArray();
-        String encodeImage = Base64.encodeToString(b, Base64.DEFAULT);
-        System.out.println(encodeImage);
 
-        try {
-            jsonObject.put("id", "1");
-            jsonObject.put("image", encodeImage);
-        } catch (JSONException e) {
-            e.printStackTrace();
+        FileOutputStream fos = new FileOutputStream(file);
+        fos.write(b);
+        fos.flush();
+        fos.close();
+//        String encodeImage = Base64.encodeToString(b, Base64.DEFAULT);
+//        System.out.println(encodeImage);
+
+//        try {
+//            jsonObject.put("id", "1");
+//            jsonObject.put("image", ""+encodeImage);
+//        } catch (JSONException e) {
+//            e.printStackTrace();
+//        }
+
+        RequestBody reqfile = RequestBody.create(MediaType.parse("image/*"), file);
+        MultipartBody.Part body = MultipartBody.Part.createFormData("upload", file.getName(), reqfile);
+        RequestBody name = RequestBody.create(MediaType.parse("text/plain"), "upload");
+
+        Call<ResponseBody> req = apiService.postImage(body, name);
+
+        req.enqueue(new Callback<ResponseBody>(){
+
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                if (response.code()==200){
+                    returnText.setText("Uploaded");
+                    returnText.setTextColor(Color.BLUE);
+                }
+
+                Toast.makeText(getApplicationContext(), response.code() + " ", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                returnText.setText("Uploaded Failed!");
+                returnText.setTextColor(Color.RED);
+                Toast.makeText(getApplicationContext(), "Request failed", Toast.LENGTH_SHORT).show();
+                t.printStackTrace();
+            }
         }
 
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, jsonObject, new Response.Listener<JSONObject>() {
-            @Override
-            public void onResponse(JSONObject response) {
-                returnText.setText(response.toString());
-            }
-        }, new Response.ErrorListener() {
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                error.printStackTrace();
-            }
-        });
-
-        queue.add(jsonObjectRequest);
+        );
+//        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, jsonObject, new Response.Listener<JSONObject>() {
+//            @Override
+//            public void onResponse(JSONObject response) {
+//                returnText.setText(response.toString());
+//            }
+//        }, new Response.ErrorListener() {
+//            @Override
+//            public void onErrorResponse(VolleyError error) {
+//                error.printStackTrace();
+//            }
+//        });
+//
+//        queue.add(jsonObjectRequest);
     }
 
 
@@ -196,8 +255,13 @@ public class MainActivity extends AppCompatActivity {
 
                                 int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
                                 String picturePath = cursor.getString(columnIndex);
-                                pickedImg = BitmapFactory.decodeFile(picturePath);
-                                showImg.setImageBitmap(BitmapFactory.decodeFile(picturePath));
+                                BitmapFactory.Options option = new BitmapFactory.Options();
+                                option.inJustDecodeBounds = true;
+                                pickedImg = BitmapFactory.decodeFile(picturePath, option);
+
+
+                                mCurrentPhotoPath = picturePath;
+                                showImg.setImageBitmap(BitmapFactory.decodeFile(picturePath, option));
                                 cursor.close();
                             }
                         }
