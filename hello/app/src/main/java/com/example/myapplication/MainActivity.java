@@ -21,16 +21,18 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -55,9 +57,11 @@ public class MainActivity extends AppCompatActivity {
     ApiService apiService;
     TextView tvData;
     TextView returnText;
+    TextView filename;
     ImageView showImg;
     Bitmap pickedImg;
-    String mCurrentPhotoPath;
+    Uri selectedUri;
+    byte[] imageData;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
         tvData = (TextView)findViewById(R.id.textView);
         returnText = (TextView)findViewById(R.id.returnText);
         showImg = (ImageView)findViewById(R.id.ImageSHow);
+        filename = findViewById(R.id.filename);
         Button btn = (Button)findViewById(R.id.httpTest);
         Button imagepick = (Button)findViewById(R.id.imagepickbtn);
 
@@ -100,66 +105,10 @@ public class MainActivity extends AppCompatActivity {
         apiService = new Retrofit.Builder().baseUrl("http://192.249.18.230:3000").client(client).build().create(ApiService.class);
     }
 
-//    public void volleypost(){
-//        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
-//        String url = "http://192.249.18.230:3000/post";
-//
-//        JSONObject jsonObject = new JSONObject();
-//
-//        try {
-//            jsonObject.put("user_id", "androidTest");
-//            jsonObject.put("name", "jungin");
-//        } catch (JSONException e) {
-//            e.printStackTrace();
-//        }
-//
-//        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, jsonObject, new Response.Listener<JSONObject>() {
-//            @Override
-//            public void onResponse(JSONObject response) {
-//                returnText.setText(response.toString());
-//            }
-//        }, new Response.ErrorListener() {
-//            @Override
-//            public void onErrorResponse(VolleyError error) {
-//                error.printStackTrace();
-//            }
-//        });
-//
-//
-//
-//        queue.add(jsonObjectRequest);
-//    }
-
     public void postimage() throws IOException {
 
-        File filesDir = getApplicationContext().getFilesDir();
-        File file = new File(filesDir, "image" + ".png");
-
-//        RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
-        String url = "http://192.249.18.230:3000/post";
-
-//        JSONObject jsonObject = new JSONObject();
-
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        pickedImg.compress(Bitmap.CompressFormat.PNG, 0, baos);
-        byte[] b = baos.toByteArray();
-
-        FileOutputStream fos = new FileOutputStream(file);
-        fos.write(b);
-        fos.flush();
-        fos.close();
-//        String encodeImage = Base64.encodeToString(b, Base64.DEFAULT);
-//        System.out.println(encodeImage);
-
-//        try {
-//            jsonObject.put("id", "1");
-//            jsonObject.put("image", ""+encodeImage);
-//        } catch (JSONException e) {
-//            e.printStackTrace();
-//        }
-
-        RequestBody reqfile = RequestBody.create(MediaType.parse("image/*"), file);
-        MultipartBody.Part body = MultipartBody.Part.createFormData("upload", file.getName(), reqfile);
+        RequestBody reqfile = RequestBody.create(MediaType.parse("image/*"), imageData);
+        MultipartBody.Part body = MultipartBody.Part.createFormData("upload", "abc", reqfile);
         RequestBody name = RequestBody.create(MediaType.parse("text/plain"), "upload");
 
         Call<ResponseBody> req = apiService.postImage(body, name);
@@ -186,19 +135,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         );
-//        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(Request.Method.POST, url, jsonObject, new Response.Listener<JSONObject>() {
-//            @Override
-//            public void onResponse(JSONObject response) {
-//                returnText.setText(response.toString());
-//            }
-//        }, new Response.ErrorListener() {
-//            @Override
-//            public void onErrorResponse(VolleyError error) {
-//                error.printStackTrace();
-//            }
-//        });
-//
-//        queue.add(jsonObjectRequest);
     }
 
 
@@ -246,130 +182,26 @@ public class MainActivity extends AppCompatActivity {
                 case 1:
                     if (resultCode == RESULT_OK && data != null) {
                         Uri selectedImage = data.getData();
-                        String[] filePathColumn = {MediaStore.Images.Media.DATA};
-                        if (selectedImage != null) {
-                            Cursor cursor = getContentResolver().query(selectedImage,
-                                    filePathColumn, null, null, null);
-                            if (cursor != null) {
-                                cursor.moveToFirst();
+                        selectedUri = selectedImage;
+                        try {
+                            InputStream inputStream = getContentResolver().openInputStream(selectedImage);
+                            byte[] buffer = new byte[1024];
+                            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream(buffer.length);
 
-                                int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-                                String picturePath = cursor.getString(columnIndex);
-                                BitmapFactory.Options option = new BitmapFactory.Options();
-                                option.inJustDecodeBounds = true;
-                                pickedImg = BitmapFactory.decodeFile(picturePath, option);
-
-
-                                mCurrentPhotoPath = picturePath;
-                                showImg.setImageBitmap(BitmapFactory.decodeFile(picturePath, option));
-                                cursor.close();
+                            int len = 0;
+                            while ((len = inputStream.read(buffer)) != -1) {
+                                byteArrayOutputStream.write(buffer, 0, len);
                             }
+                            imageData = byteArrayOutputStream.toByteArray();
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-
                     }
                     break;
             }
         }
     }
-
-
-//
-//    public class JSONTask extends AsyncTask<String, String, String> {
-//
-//        @Override
-//        protected String doInBackground(String... urls) {
-//            try {
-//                //JSONObject를 만들고 key value 형식으로 값을 저장해준다.
-//                JSONObject jsonObject = new JSONObject();
-//                jsonObject.put("user_id", "androidTest");
-//                jsonObject.put("name", "yun");
-//
-//                RequestQueue queue = Volley.newRequestQueue(getApplicationContext());
-//                String url = "http://192.249.18.230:3000/";
-//                StringRequest stringRequest = new StringRequest(Request.Method.POST, url, new Response.Listener<String>() {
-//                    @Override
-//                    public void onResponse(String response) {
-//                        returnText.setText(response);
-//                    }
-//                }, new Response.ErrorListener() {
-//                    @Override
-//                    public void onErrorResponse(VolleyError error) {
-//                        returnText.setText("Nope");
-//                    }
-//                });
-//
-//
-//
-//                queue.add(stringRequest);
-//
-//
-////                HttpURLConnection con = null;
-////                BufferedReader reader = null;
-//
-////                try{
-////                    //URL url = new URL("http://192.168.25.16:3000/users");
-////                    URL url = new URL(urls[0]);
-////                    //연결을 함
-////                    con = (HttpURLConnection) url.openConnection();
-////
-////                    con.setRequestMethod("POST");//POST방식으로 보냄
-////                    con.setRequestProperty("Cache-Control", "no-cache");//캐시 설정
-////                    con.setRequestProperty("Content-Type", "application/json");//application JSON 형식으로 전송
-////                    con.setRequestProperty("Accept", "text/html");//서버에 response 데이터를 html로 받음
-////                    con.setDoOutput(true);//Outstream으로 post 데이터를 넘겨주겠다는 의미
-////                    con.setDoInput(true);//Inputstream으로 서버로부터 응답을 받겠다는 의미
-////                    con.connect();
-////
-////                    //서버로 보내기위해서 스트림 만듬
-////                    OutputStream outStream = con.getOutputStream();
-////                    //버퍼를 생성하고 넣음
-////                    BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outStream));
-////                    writer.write(jsonObject.toString());
-////                    writer.flush();
-////                    writer.close();//버퍼를 받아줌
-////
-////                    //서버로 부터 데이터를 받음
-////                    InputStream stream = con.getInputStream();
-////
-////                    reader = new BufferedReader(new InputStreamReader(stream));
-////
-////                    StringBuffer buffer = new StringBuffer();
-////
-////                    String line = "";
-////                    while((line = reader.readLine()) != null){
-////                        buffer.append(line);
-////                    }
-////
-////                    return buffer.toString();//서버로 부터 받은 값을 리턴해줌 아마 OK!!가 들어올것임
-////
-////                } catch (MalformedURLException e){
-////                    e.printStackTrace();
-////                } catch (IOException e) {
-////                    e.printStackTrace();
-////                } finally {
-////                    if(con != null){
-////                        con.disconnect();
-////                    }
-////                    try {
-////                        if(reader != null){
-////                            reader.close();//버퍼를 닫아줌
-////                        }
-////                    } catch (IOException e) {
-////                        e.printStackTrace();
-////                    }
-////                }
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//
-//            return null;
-//        }
-
-//        @Override
-//        protected void onPostExecute(String result) {
-//            super.onPostExecute(result);
-//            tvData.setText(result);//서버로 부터 받은 값을 출력해주는 부
-//        }
-//    }
 
 }
